@@ -8,8 +8,15 @@ import {
   Outlet,
   Links,
   useLoaderData,
+  useSubmit,
+  useNavigation,
 } from "@remix-run/react";
-import { LinksFunction, json, redirect } from "@remix-run/node";
+import {
+  LinksFunction,
+  LoaderFunctionArgs,
+  json,
+  redirect,
+} from "@remix-run/node";
 import { createEmptyContact, getContacts } from "./data";
 import appStyles from "./app.css";
 
@@ -18,9 +25,11 @@ export const action = async () => {
   return redirect(`/contacts/${contact.id}/edit`);
 };
 
-export const loader = async () => {
-  const contacts = await getContacts();
-  return json({ contacts });
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q");
+  const contacts = await getContacts(q);
+  return json({ contacts, q });
 };
 
 export const links: LinksFunction = () => [
@@ -28,7 +37,12 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
-  const { contacts } = useLoaderData<typeof loader>();
+  const { contacts, q } = useLoaderData<typeof loader>();
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const searching =
+    navigation.location &&
+    new URLSearchParams(navigation.location.search).has("q");
   return (
     <html lang="en">
       <head>
@@ -41,15 +55,25 @@ export default function App() {
         <div id="sidebar">
           <h1>Remix Contacts</h1>
           <div>
-            <Form id="search-form" role="search">
+            <Form
+              id="search-form"
+              onChange={(event) => {
+                const isFirstSearch = q === null;
+                submit(event.currentTarget, {
+                  replace: !isFirstSearch,
+                });
+              }}
+            >
               <input
                 id="q"
                 aria-label="Search contacts"
+                defaultValue={q || ""}
                 placeholder="Search"
                 type="search"
                 name="q"
+                className={searching ? "loading" : ""}
               />
-              <div id="search-spinner" aria-hidden hidden={true} />
+              <div id="search-spinner" aria-hidden hidden={!searching} />
             </Form>
             <Form method="post">
               <button type="submit">New</button>
@@ -85,7 +109,12 @@ export default function App() {
             )}
           </nav>
         </div>
-        <div id="detail">
+        <div
+          className={
+            navigation.state === "loading" && !searching ? "loading" : ""
+          }
+          id="detail"
+        >
           <Outlet />
         </div>
         <ScrollRestoration />
